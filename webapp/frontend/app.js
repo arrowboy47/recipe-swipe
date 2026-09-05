@@ -356,9 +356,15 @@ async function submitSwipe(card, dir) {
     });
     swiped.add(card.id);
     if (res.result === "approved") {
-      toast(res.dry_run
-        ? `Dry run · not sent to Mealie · ${card.preview.title}`
-        : `Saved to Mealie · ${card.preview.title}`);
+      // Three outcomes worth telling apart. "already_in_mealie" means the card
+      // was filed but nothing was imported, because that exact source URL is
+      // in the library - saying "Saved to Mealie" there would be a lie.
+      // "similar_to" is the fallible title match: the import DID happen, and
+      // this is a heads-up, not a refusal.
+      if (res.dry_run) toast(`Dry run · not sent to Mealie · ${card.preview.title}`);
+      else if (res.already_in_mealie) toast(`Already in Mealie · filed without re-importing`);
+      else if (res.similar_to) toast(`Saved · looks similar to "${res.similar_to}"`, 4500);
+      else toast(`Saved to Mealie · ${card.preview.title}`);
     } else if (res.result === "already") { /* idempotent replay, nothing to say */ }
   } catch (err) {
     toast(`Couldn't ${dir === "right" ? "save" : "reject"}: ${err.message}`, 5000);

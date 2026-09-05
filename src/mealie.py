@@ -81,16 +81,71 @@ PROMOTE_TIMEOUT = 300  # Mealie fetches and processes the hero image server-side
                        # during import; observed exceeding 60s on a real recipe.
 
 
+def find_by_org_url(url: str, env=None, session=None) -> str | None:
+    """Slug of a recipe already imported from ``url``, or None.
+
+    A targeted `queryFilter` rather than scanning the whole library, because
+    this runs once per promotion. Comparison is on the canonical form so a
+    trailing slash or a tracking parameter can't hide an existing import.
+
+    Returns the *oldest* match: when duplicates already exist, the earliest is
+    the one the rest of the system will have linked to.
+    """
+    env = env or load_env()
+    sess = session or _session(env)
+    try:
+        target = canonicalize(url)
+    except ValueError:
+        return None
+    # Query on the canonical form, not the caller's raw string: promote() stores
+    # the canonical URL as orgURL, so that is the key actually in the database.
+    # Passing the raw URL here made an http:// or ?utm_source= variant miss.
+    try:
+        resp = sess.get(f"{env['MEALIE_URL']}/api/recipes",
+                        params={"queryFilter": f'orgURL = "{target}"', "perPage": 50},
+                        timeout=TIMEOUT)
+    except requests.RequestException:
+        return None                      # never block a promote on a flaky lookup
+    if not resp.ok:
+        return None
+
+    matches = []
+    for item in resp.json().get("items", []):
+        raw = item.get("orgURL")
+        if not raw:
+            continue
+        try:
+            if canonicalize(raw) == target:
+                matches.append(item)
+        except ValueError:
+            continue
+    if not matches:
+        return None
+    matches.sort(key=lambda i: i.get("createdAt") or "")
+    return matches[0]["slug"]
+
+
 def promote(record: dict, env=None, session=None) -> str:
     """Import a staged record into Mealie and return its slug.
 
     Sends the stored JSON-LD rather than the URL, so Mealie parses our durable
     copy and the import still works if the source page has since disappeared.
+
+    Importing the same source URL twice is treated as success, not as work to
+    redo: Mealie has no uniqueness constraint on ``orgURL``, so a second import
+    silently creates ``<slug>-1``. Four such pairs accumulated before the swipe
+    app's own double-submit bugs were fixed. Those fixes remove the common
+    cause; this check removes the possibility, wherever the second call came
+    from - a retry, a re-staged record, or a hand-run script.
     """
     import json
 
     env = env or load_env()
     sess = session or _session(env)
+
+    existing = find_by_org_url(record["canonical_url"], env, sess)
+    if existing:
+        return existing
 
     data = record.get("jsonld")
     payload = {

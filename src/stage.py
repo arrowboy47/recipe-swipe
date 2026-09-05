@@ -28,8 +28,9 @@ from pathlib import Path
 
 from .canonical import canonicalize, record_id
 
-# Only relevant if you drive the harvester from a different host than the
-# one staging lives on; this app itself always passes host=None (local disk).
+# No default staging host: this app reads a local bind mount. The SSH
+# push path exists for the cron that runs on a different machine, and a
+# real hostname does not belong in a published repo.
 HOST = None
 ROOT = "/data/staging"
 SCHEMA = 1
@@ -76,7 +77,19 @@ class Stager:
                 st.stage(record, image_bytes)
     """
 
-    def __init__(self, host: str | None = HOST, root: str | Path = ROOT):
+    def __init__(self, host: str | None = HOST, root: str | Path = ROOT,
+                 read_only: bool = False):
+        """``read_only`` makes this a pure reader: state is loaded so dedup
+        questions can still be answered, but nothing is ever written back.
+
+        A dry run needs exactly that. Without it, ``flush()`` rewrote
+        ``seen``/``blacklist``/``cursors`` on every dry run - identical content,
+        so nothing was corrupted, but it broke the documented "no state
+        touched" guarantee, put needless writes on the staging host over SSH,
+        and left a trap where any future mutation before the caller's own
+        dry-run guard would silently persist.
+        """
+        self.read_only = read_only
         self.host = host
         self.root = Path(root)
         self._tmp = Path(tempfile.mkdtemp(prefix="recipe-stage-"))
@@ -177,6 +190,8 @@ class Stager:
 
     def flush(self) -> int:
         """Ship buffered files and write state. Safe to call with nothing buffered."""
+        if self.read_only:
+            return 0
         self._require_state()
         pending = self.root / "pending"
 

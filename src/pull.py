@@ -14,14 +14,15 @@ meat-word title regex: the old one silently discarded "Vegan Butter Chicken".
 
 import argparse
 import sys
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
-from .canonical import canonicalize
 from .extract import ExtractError, extract
 from .harvest import HarvestError, harvest
-from .mealie import MealieError, existing_org_urls
+from .dedup import RecipeIndex
+from .mealie import MealieError
 from .sources import diet_tag, load_sources
 from .stage import HOST, ROOT, Stager, build_record
 
@@ -88,19 +89,25 @@ def pull(count=20, sources=None, course=None, search=None, after=None,
     order = [e["domain"] for e in entries]
 
     staged, skipped = [], []
+    # Why candidates were passed over. Dedup working correctly is the usual
+    # reason a run stages fewer than asked, and the weekly cron's only output
+    # is a Telegram message - so a bare "staged 6 of 20" reads as a failure
+    # when nothing is wrong. Counted here purely so the summary can say so.
+    filtered = Counter()
     newest = {}
     sess = requests.Session()
 
-    # Anything already in Mealie must never be staged again, or the Phase 3 app
-    # would promote a duplicate. Mealie keeps the source URL as `orgURL`.
+    # Anything already in Mealie must never be staged again, or the approval
+    # app would promote a duplicate. Checked on two keys - see src/dedup.py for
+    # why the source URL and the title carry different authority.
     # A pull is still useful if Mealie is down, so this is a warning, not a stop.
     try:
-        in_mealie = existing_org_urls()
+        index = RecipeIndex.build()
     except MealieError as e:
-        in_mealie = set()
+        index = None
         errors.append(f"Mealie dedup unavailable ({e}); staged recipes may duplicate the library")
 
-    with Stager(host=host, root=root) as st:
+    with Stager(host=host, root=root, read_only=dry_run) as st:
         for cand in _round_robin(queues, order):
             if len(staged) >= count:
                 break
@@ -111,11 +118,21 @@ def pull(count=20, sources=None, course=None, search=None, after=None,
                 newest[cand.source] = max(prev, cand.date) if prev else cand.date
 
             if st.is_known(cand.url):
+                filtered["already staged or judged"] += 1
                 continue
 
-            if canonicalize(cand.url) in in_mealie:
+            dup = index.find(url=cand.url, title=cand.title) if index else None
+            if dup:
+                # A title-only match is reported by name, not just counted: it
+                # is the fallible key, and a wrong call here quietly costs a
+                # real recipe. The URL key is certain, so it stays a tally.
+                if dup.confidence == "certain":
+                    filtered["already in Mealie"] += 1
+                else:
+                    skipped.append(f"{cand.source}: {cand.url} - looks like "
+                                   f"{dup.slug} already in Mealie ({dup.reason})")
                 if not dry_run:
-                    st.note_skip(cand.url, "already in Mealie", cand.source)
+                    st.note_skip(cand.url, f"already in Mealie: {dup.slug}", cand.source)
                 continue
 
             try:
@@ -146,12 +163,9 @@ def pull(count=20, sources=None, course=None, search=None, after=None,
         if not dry_run:
             for domain, value in newest.items():
                 st.set_cursor(domain, value)
-        else:
-            # Nothing buffered and no state touched, so make the flush a no-op.
-            st._staged.clear()
 
     return {"staged": staged, "skipped": skipped, "errors": errors,
-            "dry_run": dry_run, "requested": count}
+            "filtered": dict(filtered), "dry_run": dry_run, "requested": count}
 
 
 def format_summary(result) -> str:
@@ -164,6 +178,12 @@ def format_summary(result) -> str:
             bits.append(f"{p['total_minutes']}m")
         lines.append(f"  + [{rec['diet']}] {p.get('title') or rec['canonical_url']} "
                      f"({rec['source']}, {', '.join(bits)})")
+    # Say why a run fell short. Dedup doing its job is the common case, and
+    # without this the summary looks like an unexplained failure.
+    filtered = result.get("filtered") or {}
+    if filtered and len(result["staged"]) < result["requested"]:
+        why = ", ".join(f"{n} {reason}" for reason, n in sorted(filtered.items()))
+        lines.append(f"Passed over {sum(filtered.values())} candidate(s): {why}.")
     if result["skipped"]:
         lines.append(f"{len(result['skipped'])} skipped:")
         lines += [f"  - {s}" for s in result["skipped"][:5]]

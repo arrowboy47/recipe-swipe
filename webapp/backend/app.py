@@ -40,6 +40,7 @@ from pydantic import BaseModel
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
+from src.dedup import RecipeIndex                 # noqa: E402
 from src.mealie import MealieError, promote, tag_recipes  # noqa: E402
 from src.pull import pull                        # noqa: E402
 from src.stage import Stager                     # noqa: E402
@@ -245,8 +246,25 @@ def swipe(record_id: str, body: SwipeRequest):
             _move(json_path, image_path, STAGING_ROOT / "rejected")
             return {"result": "rejected"}
 
+        # Check both dedup keys before importing. `promote()` guards the URL key
+        # itself, but the app needs the verdict to report it, and the title key
+        # is the app's call to make rather than the client's: a title match is
+        # fallible, so it never blocks an approval you made deliberately - it
+        # imports and tells you what it resembles.
+        dup = None
+        try:
+            dup = RecipeIndex.build().find(
+                url=record["canonical_url"], title=record["preview"].get("title"))
+        except MealieError:
+            pass                       # dedup is a safeguard, not a gate
+
+        already = bool(dup and dup.confidence == "certain")
+        similar = dup.slug if dup and dup.confidence == "likely" else None
+
         if DRY_RUN:
             slug = None
+        elif already:
+            slug = dup.slug            # in the library already; file, don't re-import
         else:
             try:
                 promotion = promote(record)
@@ -261,7 +279,8 @@ def swipe(record_id: str, body: SwipeRequest):
             "source": record.get("source", ""),
         }
         _move(json_path, image_path, STAGING_ROOT / "approved")
-        return {"result": "approved", "slug": slug, "dry_run": DRY_RUN}
+        return {"result": "approved", "slug": slug, "dry_run": DRY_RUN,
+                "already_in_mealie": already, "similar_to": similar}
 
 
 def _move(json_path: Path, image_path: Path, dest_dir: Path) -> None:
