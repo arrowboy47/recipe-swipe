@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Recipe Swipe</title>
-<meta name="theme-color" content="#1e1e2e">
+<meta name="theme-color" content="#181825">
 <link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -14,54 +15,92 @@
 <body>
 
 <header class="topbar">
-  <button id="btn-pull" class="pill-btn">Pull more</button>
-  <div class="counter"><span id="count-current">0</span>/<span id="count-total">0</span></div>
-  <button id="btn-menu" class="icon-btn" aria-label="Options">⋯</button>
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">Recipe&nbsp;Swipe</span>
+    <span id="dry-badge" class="dry-badge" hidden title="Approvals are not being sent to Mealie">Dry run</span>
+  </div>
+  <div class="progress" role="status" aria-live="polite">
+    <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+    <div class="progress-count"><span id="count-current">0</span> <span class="slash">/</span> <span id="count-total">0</span></div>
+  </div>
+  <button id="btn-pull" class="icon-btn" aria-label="Pull more recipes">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
 </header>
 
 <main id="stage">
-  <div id="deck" class="deck"></div>
+  <div id="deck" class="deck" aria-label="Recipe deck"></div>
 
   <div id="empty-state" class="empty-state" hidden>
-    <div class="empty-icon">🍽️</div>
-    <p>Deck's empty.</p>
-    <button id="btn-pull-empty" class="btn-primary">Pull more recipes</button>
+    <div class="empty-plate" aria-hidden="true">🍽️</div>
+    <h2>You're all caught up</h2>
+    <p>Nothing left in the staging queue.</p>
+    <button id="btn-pull-empty" class="btn-primary">Harvest more recipes</button>
   </div>
 
   <div id="loading" class="loading">
-    <div class="spinner"></div>
+    <div class="spinner" aria-hidden="true"></div>
+    <p>Shuffling the deck…</p>
   </div>
-
-  <div class="swipe-hint up">↑ more info</div>
 </main>
 
-<!-- Detail panel: slides up over the card, swipeable itself -->
-<div id="detail-panel" class="detail-panel" hidden>
-  <div class="detail-drag-handle"></div>
-  <div id="detail-body" class="detail-body"></div>
-  <div class="detail-hint">← reject &nbsp;·&nbsp; ↓ back &nbsp;·&nbsp; approve →</div>
+<nav id="actions" class="actions" aria-label="Actions">
+  <button id="btn-nope" class="act act-nope" aria-label="Reject">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <button id="btn-info" class="act act-info" aria-label="More information">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V9"/><path d="M6.5 14.5L12 9l5.5 5.5"/></svg>
+  </button>
+  <button id="btn-like" class="act act-like" aria-label="Approve">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.4-9A5.1 5.1 0 0 1 12 6.3a5.1 5.1 0 0 1 9.4 5.2c-1.9 4.4-9.4 9-9.4 9z"/></svg>
+  </button>
+</nav>
+
+<!-- Detail sheet. Positioning lives on .detail-wrap, gesture transform on
+     .detail-card - never both on one element (that collision was a real bug). -->
+<div id="detail" class="detail" hidden>
+  <div class="detail-scrim"></div>
+  <div class="detail-wrap">
+    <article class="detail-card">
+      <div id="detail-grab" class="detail-grab"><span class="grabber"></span></div>
+      <div id="detail-body" class="detail-body"></div>
+      <div class="detail-actions">
+        <button id="btn-d-nope" class="act act-nope sm" aria-label="Reject">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+        <button id="btn-d-back" class="btn-ghost">Back to deck</button>
+        <button id="btn-d-like" class="act act-like sm" aria-label="Approve">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.4-9A5.1 5.1 0 0 1 12 6.3a5.1 5.1 0 0 1 9.4 5.2c-1.9 4.4-9.4 9-9.4 9z"/></svg>
+        </button>
+      </div>
+    </article>
+  </div>
 </div>
 
-<!-- Pull-more sheet -->
+<!-- Harvest sheet -->
 <div id="pull-sheet" class="sheet" hidden>
   <div class="sheet-backdrop"></div>
-  <div class="sheet-panel">
-    <div class="sheet-handle"></div>
-    <h2>Pull more recipes</h2>
-    <label>Count
-      <input type="number" id="pull-count" value="20" min="1" max="100">
-    </label>
-    <label>Source (comma-separated domains, optional)
-      <input type="text" id="pull-source" placeholder="rainbowplantlife.com, veganricha.com">
-    </label>
-    <label>Course (optional)
-      <input type="text" id="pull-course" placeholder="dinner, dessert, soup...">
-    </label>
-    <label>Search (optional)
-      <input type="text" id="pull-search" placeholder="lentil">
-    </label>
-    <button id="btn-pull-go" class="btn-primary">Pull</button>
-    <p id="pull-status" class="pull-status"></p>
+  <div class="sheet-wrap">
+    <div class="sheet-card">
+      <span class="grabber"></span>
+      <h2>Harvest more recipes</h2>
+      <p class="sheet-sub">Runs the same scraper as the Sunday cron, right now.</p>
+      <label>How many
+        <input type="number" id="pull-count" value="20" min="1" max="100">
+      </label>
+      <label>Sources <span class="opt">optional, comma-separated</span>
+        <input type="text" id="pull-source" placeholder="rainbowplantlife.com, veganricha.com">
+      </label>
+      <label>Course <span class="opt">optional</span>
+        <input type="text" id="pull-course" placeholder="dinner, dessert, soup…">
+      </label>
+      <label>Search <span class="opt">optional</span>
+        <input type="text" id="pull-search" placeholder="lentil">
+      </label>
+      <button id="btn-pull-go" class="btn-primary">Harvest</button>
+      <p id="pull-status" class="pull-status"></p>
+    </div>
   </div>
 </div>
 

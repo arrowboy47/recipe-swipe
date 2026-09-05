@@ -22,12 +22,27 @@ blogs, `sources.json`.
   moves from `pending/` to `approved/`.
 - **Swipe left** → the file moves to `rejected/` and its canonical URL is
   added to a blacklist, so it's never re-staged by a future harvest.
-- **Swipe up** → a detail panel slides in with a fuller view (description,
-  more ingredients, keywords, source link). From there, right/left still
+- **Swipe up** → a detail sheet slides in with the full ingredient list, the
+  method, description, keywords and source link. From there, right/left still
   approve/reject; down dismisses back to the card, unjudged.
+- **Buttons and keys too** — a reject/info/approve bar sits under the deck and
+  the arrow keys drive the same paths. A gesture that silently does nothing is
+  indistinguishable from a broken app, so nothing is gesture-only.
 - **Pull more** — trigger the harvester on demand from inside the app, with
   optional source/course/search filters, rather than only via an external
   cron job.
+
+## Dry run
+
+Set `SWIPE_DRY_RUN=1` on any instance that isn't your real one. Swipes still
+file the staged record, so the whole flow is exercised, but the Mealie write is
+skipped and the UI shows a **Dry run** badge. A dev server needs real Mealie
+credentials to be worth testing against, which is exactly why it needs this —
+otherwise a test swipe-right lands in your real recipe library.
+
+```bash
+curl -s -u user:pass http://localhost:9926/api/health   # -> "dry_run": true
+```
 
 ## Stack
 
