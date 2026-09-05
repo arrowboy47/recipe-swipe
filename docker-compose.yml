@@ -1,0 +1,17 @@
+services:
+  recipe-swipe:
+    build:
+      context: .
+      dockerfile: webapp/Dockerfile
+    container_name: recipe-swipe
+    restart: unless-stopped
+    ports:
+      - "9926:9926"
+    volumes:
+      # Point this at wherever your staging directory actually lives.
+      - ./staging:/data/staging
+    env_file:
+      - .env
+    environment:
+      TZ: America/Los_Angeles
+      STAGING_ROOT: /data/staging

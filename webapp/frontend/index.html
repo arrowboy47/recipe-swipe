@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Recipe Swipe</title>
+<meta name="theme-color" content="#1e1e2e">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button id="btn-pull" class="pill-btn">Pull more</button>
+  <div class="counter"><span id="count-current">0</span>/<span id="count-total">0</span></div>
+  <button id="btn-menu" class="icon-btn" aria-label="Options">⋯</button>
+</header>
+
+<main id="stage">
+  <div id="deck" class="deck"></div>
+
+  <div id="empty-state" class="empty-state" hidden>
+    <div class="empty-icon">🍽️</div>
+    <p>Deck's empty.</p>
+    <button id="btn-pull-empty" class="btn-primary">Pull more recipes</button>
+  </div>
+
+  <div id="loading" class="loading">
+    <div class="spinner"></div>
+  </div>
+
+  <div class="swipe-hint up">↑ more info</div>
+</main>
+
+<!-- Detail panel: slides up over the card, swipeable itself -->
+<div id="detail-panel" class="detail-panel" hidden>
+  <div class="detail-drag-handle"></div>
+  <div id="detail-body" class="detail-body"></div>
+  <div class="detail-hint">← reject &nbsp;·&nbsp; ↓ back &nbsp;·&nbsp; approve →</div>
+</div>
+
+<!-- Pull-more sheet -->
+<div id="pull-sheet" class="sheet" hidden>
+  <div class="sheet-backdrop"></div>
+  <div class="sheet-panel">
+    <div class="sheet-handle"></div>
+    <h2>Pull more recipes</h2>
+    <label>Count
+      <input type="number" id="pull-count" value="20" min="1" max="100">
+    </label>
+    <label>Source (comma-separated domains, optional)
+      <input type="text" id="pull-source" placeholder="rainbowplantlife.com, veganricha.com">
+    </label>
+    <label>Course (optional)
+      <input type="text" id="pull-course" placeholder="dinner, dessert, soup...">
+    </label>
+    <label>Search (optional)
+      <input type="text" id="pull-search" placeholder="lentil">
+    </label>
+    <button id="btn-pull-go" class="btn-primary">Pull</button>
+    <p id="pull-status" class="pull-status"></p>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
