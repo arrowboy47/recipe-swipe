@@ -1,6 +1,6 @@
 # Recipe Swipe
 
-A Tinder-style card interface for approving or rejecting recipes into a
+A dating app inspired card interface for approving or rejecting recipes into a
 [Mealie](https://mealie.io) instance. Swipe right to import a recipe, left to
 reject it, up for a more detailed view before deciding.
 
